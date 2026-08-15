@@ -1,0 +1,11 @@
+                      precision    recall  f1-score   support
+
+     Billing inquiry       0.19      0.14      0.17       327
+Cancellation request       0.18      0.18      0.18       339
+     Product inquiry       0.21      0.19      0.20       328
+      Refund request       0.19      0.21      0.20       351
+     Technical issue       0.21      0.24      0.22       349
+
+            accuracy                           0.19      1694
+           macro avg       0.19      0.19      0.19      1694
+        weighted avg       0.19      0.19      0.19      1694
