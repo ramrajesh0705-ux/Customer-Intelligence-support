@@ -1,4 +1,6 @@
 "# Customer-Intelligence-support" 
+
+
 "## Problem Statement"
 The rapid growth of customer support requests across SaaS, e-commerce, and technology companies has made traditional manual ticket management inefficient, time-consuming, and costly. This project focuses on developing an AI-powered Customer Support Intelligence Platform that can automate important stages of the customer support process using the Customer Support Ticket Dataset from Kaggle.
 
