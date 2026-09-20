@@ -2,8 +2,6 @@
 
 An AI-powered customer support analytics and prediction system that helps support teams understand ticket trends and estimate how newly submitted tickets should be categorized, prioritized, and resolved. The project combines an interactive Streamlit dashboard with a FastAPI inference service and machine-learning models trained from customer-support ticket data.
 
-> **Current scope:** The repository provides exploratory analysis, model-training notebooks, a prediction API, and a Streamlit interface. The API expects trained model artifacts under `models/`; these artifacts are not included in the repository listing and must be supplied before predictions can be served.
-
 ## Project Overview & Purpose
 
 Manual ticket triage is slow, inconsistent, and difficult to scale. Customer Support Intelligence turns ticket text and customer/context attributes into actionable predictions that can support routing and service-level decisions.
@@ -256,29 +254,3 @@ The services are available at:
 - API health check: `http://localhost:8000/health`
 
 The Compose configuration mounts `./models` read-only into the API container and configures the frontend to call `http://api:8000`.
-
-### Run the training notebooks
-
-Launch Jupyter from the repository root:
-
-```bash
-pip install jupyter
-jupyter notebook
-```
-
-The notebooks in `training/` can then be opened individually. Review each notebook's data paths and output locations before running it, since trained artifacts must ultimately be copied into the model directories expected by `prediction_api/config.py`.
-
-## Model Evaluation Note
-
-The checked-in `training/classification_report.txt` records an accuracy of `0.19` on 1,694 examples for five ticket categories. Treat this as a baseline/reference result rather than a production-quality benchmark. Before deployment, validate model performance on a representative holdout set, inspect class imbalance, and confirm that the generated artifacts match the inference feature schemas.
-
-## Development Notes
-
-- The API loads models at process startup through `ModelService`.
-- `POST /v1/predict` requires a non-empty `description`, a purchase date, and customer age between 1 and 120.
-- The prediction UI sends a default satisfaction rating of `4`; the API accepts values from `1` to `5`.
-- Keep serialized model files out of source control when they are large or contain sensitive data. Use a secure artifact store or deployment volume where appropriate.
-
-## License
-
-No license file is currently included in the repository. Add a license before distributing or deploying the project for third-party use.
