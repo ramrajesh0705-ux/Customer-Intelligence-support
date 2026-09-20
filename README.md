@@ -66,6 +66,10 @@ No external API key is required by the application code currently present. Model
 │       └── 2_Prediction.py      # Ticket form and API-backed predictions
 ├── data/
 │   └── sample_tickets.csv       # Sample ticket dataset used for analysis/training
+├── models/
+│   └── category/                # transformer model & encoder
+├── resolution_time/model.pkl    # Resolution-time predictor
+└── priority/model.skops         # Priority predictor
 ├── prediction_api/
 │   ├── config.py                # Model-root and model-path configuration
 │   ├── main.py                  # FastAPI application and HTTP endpoints
