@@ -1,0 +1,1342 @@
+# Customer Intelligence Repository Interview Preparation
+
+Repository reviewed: [`ramrajesh0705-ux/Customer-Intelligence-support`](https://github.com/ramrajesh0705-ux/Customer-Intelligence-support)
+
+## Evidence-based project assessment
+
+### What this project is
+
+This is a customer-support ticket intelligence system with three prediction tasks:
+
+1. Ticket category classification using a locally stored Hugging Face Transformer.
+2. Ticket-priority prediction using a serialized classical ML/LightGBM-compatible model.
+3. Resolution-time estimation using a serialized regression model.
+
+It also includes:
+
+- A Streamlit home page and multi-page dashboard.
+- An EDA dashboard based on `data/sample_tickets.csv`.
+- A FastAPI inference service.
+- Pydantic request and response validation.
+- Docker and Docker Compose configuration.
+- Training notebooks covering Logistic Regression, Multinomial Naive Bayes, Random Forest, XGBoost, LSTM, BERT/Transformer classification, priority prediction, resolution-time prediction, and MLflow experiments.
+
+### Important implementation caveats
+
+The following are important to explain honestly in an interview:
+
+- The deployed API loads model artifacts from local paths, but the repository listing does not show the actual `models/` directory. The `.dockerignore` explicitly excludes `models/`.
+- MLflow is used in training notebooks, not as part of the deployed API.
+- Optuna appears in the advanced training notebook, but it is not listed in the API or frontend requirements.
+- There is no database implementation.
+- There is no structured application logging framework. The code mainly uses exception handling and Streamlit messages.
+- The README says the frontend tracks model performance over time, but the current Streamlit implementation primarily displays static dashboard metrics; production monitoring is **not implemented in the current repository**.
+- The resume was not available in the repository or conversation, so resume claims cannot be cross-checked directly.
+
+---
+
+# First: 30 most likely interview questions
+
+## 1. Project Overview
+
+### 1. What problem does this project solve?
+
+**Interview-ready answer:**  
+The project automates and supports customer-support ticket triage. It uses ticket text and customer metadata to predict the ticket category, priority, and estimated resolution time. The goal is to help support teams route tickets faster and improve operational visibility through an EDA dashboard.
+
+**Technical concept:**  
+This is a multi-model ML application. Different prediction tasks are handled by separate models because classification and regression have different targets and evaluation requirements.
+
+**Repository evidence:**  
+`README.md`, `prediction_api/model_service.py`, `app/pages/1_EDA.py`.
+
+---
+
+### 2. What is the end-to-end workflow?
+
+**Interview-ready answer:**  
+
+1. A user enters ticket details in the Streamlit prediction page.
+2. Streamlit builds a JSON payload.
+3. The payload is sent to `POST /v1/predict`.
+4. FastAPI validates it using `TicketRequest`.
+5. `ModelService` generates the model-specific features.
+6. The category Transformer predicts the category and confidence.
+7. The priority model predicts priority.
+8. The resolution model uses metadata plus predicted category and priority.
+9. FastAPI returns a `PredictionResponse`.
+10. Streamlit formats the results for the user.
+
+**Technical concept:**  
+This separates the UI layer from the inference layer. Streamlit does not load models directly; the API owns model loading and prediction.
+
+**Repository evidence:**  
+`app/pages/2_Prediction.py`, `prediction_api/main.py`, `prediction_api/model_service.py`.
+
+---
+
+### 3. Why did you use separate models for category, priority, and resolution time?
+
+**Interview-ready answer:**  
+The targets have different characteristics. Category and priority are classification problems, while resolution time is a regression problem. Separating the models allows each task to use appropriate features, algorithms, and evaluation metrics.
+
+**Technical concept:**  
+A classification model predicts discrete labels, while a regression model predicts a continuous numerical value.
+
+**Repository evidence:**  
+`ModelService.predict()`, `_priority_features()`, and `_resolution_features()`.
+
+---
+
+### 4. What is the architecture of the application?
+
+**Interview-ready answer:**  
+The system has three main layers:
+
+- A Streamlit frontend in `app/`.
+- A FastAPI inference service in `prediction_api/`.
+- Local model artifacts under configurable model paths.
+
+Docker Compose runs the frontend and API as separate services. The frontend communicates with the API using the Docker service name `api`.
+
+**Technical concept:**  
+This is a lightweight service-oriented architecture. The UI and model-serving process are independently deployable.
+
+**Repository evidence:**  
+`docker-compose.yml`, `Dockerfile.api`, `Dockerfile.frontend`.
+
+---
+
+### 5. What were your main contributions?
+
+**Interview-ready answer:**  
+Based on the repository, the implementation work includes building the Streamlit dashboard, creating the FastAPI prediction service, defining Pydantic contracts, implementing model loading and feature engineering, adding Docker deployment, and experimenting with multiple training approaches in notebooks.
+
+I would describe the exact contribution honestly according to which notebooks and application files I personally authored.
+
+**Technical concept:**  
+A strong answer separates implemented code from experimental work and avoids claiming production features that are not present.
+
+**Repository evidence:**  
+`app/`, `prediction_api/`, `training/`, Docker files.
+
+---
+
+### 6. What types of data are present?
+
+**Interview-ready answer:**  
+The dataset contains ticket and customer fields such as customer age, gender, product purchased, purchase date, ticket type, subject, description, ticket status, ticket priority, ticket channel, first-response time, time to resolution, and satisfaction rating.
+
+**Technical concept:**  
+The project combines structured tabular features with unstructured text features.
+
+**Repository evidence:**  
+`data/sample_tickets.csv`, training notebook outputs, `model_service.py`.
+
+---
+
+### 7. Is there a database?
+
+**Interview-ready answer:**  
+No. Database storage is **not implemented in the current repository**. The application reads CSV data for EDA and loads model files from local filesystem paths. A production version could use PostgreSQL, object storage, or a feature store for tickets and model artifacts.
+
+**Technical concept:**  
+A CSV-based workflow is suitable for a prototype but does not provide transactional storage, concurrent writes, indexing, or data governance.
+
+---
+
+### 8. What happens when model files are missing?
+
+**Interview-ready answer:**  
+`ModelService._load_models()` loads each artifact independently and records errors in `self.errors`. The API can start even if some models fail to load. `/health` reports readiness, loaded models, and loading errors. If no prediction model is available, `/v1/predict` returns HTTP 503.
+
+**Technical concept:**  
+This is partial model loading and graceful degradation.
+
+**Repository evidence:**  
+`prediction_api/model_service.py`, lines 22–62 and 64–78; `prediction_api/main.py`.
+
+---
+
+### 9. What are the main Python concepts used?
+
+**Interview-ready answer:**  
+The project uses classes, type annotations, dictionaries, list comprehensions, static methods, properties, exception handling, environment variables, `pathlib.Path`, Pandas DataFrames, and Python package imports.
+
+For example, `ModelService` encapsulates model state, while `@property` is used for the computed `is_ready` value.
+
+**Technical concept:**  
+Encapsulation keeps model loading, feature engineering, and inference in one service object.
+
+**Repository evidence:**  
+`prediction_api/model_service.py`, `config.py`, `schemas.py`.
+
+---
+
+### 10. Why is `ModelService` implemented as a class?
+
+**Interview-ready answer:**  
+The class stores loaded models and loading errors as instance state. This avoids loading the artifacts for every request and keeps the inference logic centralized.
+
+**Technical concept:**  
+Model loading is an expensive initialization operation, so the service loads models once when the FastAPI module is imported.
+
+**Repository evidence:**  
+`model_service.py`, `model_service = ModelService()` in `main.py`.
+
+---
+
+## 2. Data preprocessing and feature engineering
+
+### 11. How is ticket text constructed?
+
+**Interview-ready answer:**  
+The subject and description are combined with a space:
+
+```python
+text = subject + " " + description
+```
+
+This is done in the API for inference and in the training notebooks for model training.
+
+**Technical concept:**  
+Combining fields gives the text model both the short issue summary and the detailed customer explanation.
+
+**Repository evidence:**  
+`model_service.py`, `_priority_features()`, `_resolution_features()`, and training notebooks.
+
+---
+
+### 12. What happens to missing text values?
+
+**Interview-ready answer:**  
+The implementation uses `.fillna("")` when combining subject and description. The API also requires the description to have at least one character through `Field(min_length=1)`.
+
+**Technical concept:**  
+Replacing missing text with an empty string prevents string concatenation errors while preserving the meaning that no text was supplied.
+
+**Repository evidence:**  
+`prediction_api/schemas.py`, `model_service.py`.
+
+---
+
+### 13. How are categorical features handled?
+
+**Interview-ready answer:**  
+The training pipelines use transformations such as label encoding and model-specific preprocessing. The deployed API passes categorical columns such as gender, product, and channel into the serialized priority and resolution models. The exact encoding logic is expected to be inside those serialized pipelines.
+
+**Technical concept:**  
+Training and inference must use identical category mappings and feature-column names.
+
+**Important caveat:**  
+The API itself does not explicitly perform one-hot encoding. That preprocessing must be embedded inside the serialized model pipeline. If it was not embedded during training, inference could fail or produce incorrect results.
+
+---
+
+### 14. Why is `Days Since Purchase` created?
+
+**Interview-ready answer:**  
+The priority feature engineering calculates the difference between the first-response date and purchase date. This captures how long the customer has owned the product before raising or receiving support.
+
+**Technical concept:**  
+Date differences convert raw dates into a meaningful numerical feature.
+
+**Repository evidence:**  
+`model_service.py`, `_priority_features()`.
+
+---
+
+### 15. How is `Days Since Purchase` calculated in the API?
+
+**Interview-ready answer:**  
+The purchase date and first-response date are converted with `pd.to_datetime()`. The implementation subtracts the purchase date from the maximum first-response date and extracts the number of days.
+
+**Technical concept:**  
+Pandas datetime arithmetic creates a `Timedelta`, and `.dt.days` converts it to an integer feature.
+
+**Potential improvement:**  
+Using `datetime.now().date()` is dependent on the server clock. A production system should define a consistent event timestamp and timezone.
+
+---
+
+### 16. How was the data split for classification?
+
+**Interview-ready answer:**  
+The training notebooks use an 80/20 train-test split with `random_state=42` and `stratify=y`. Stratification attempts to preserve class proportions in both sets.
+
+**Technical concept:**  
+A stratified split is especially useful when ticket classes are imbalanced.
+
+**Repository evidence:**  
+`training/baselineModel.ipynb`, `training/AdvacedClassicalMLModels.ipynb`.
+
+---
+
+### 17. What preprocessing issues did you observe?
+
+**Interview-ready answer:**  
+The dataset contains missing values in fields such as resolution, first response time, time to resolution, and customer satisfaction. The EDA page can coerce resolution time to numeric and generate fallback values. The training notebooks inspect missingness and combine text fields.
+
+**Important caveat:**  
+The EDA page fills missing resolution times with randomly generated exponential values. That is suitable only as a demonstration fallback and should not be used for production analytics or model training.
+
+---
+
+### 18. How would you improve the current preprocessing?
+
+**Interview-ready answer:**  
+
+- Remove duplicate tickets.
+- Validate date ordering.
+- Avoid synthetic random values for missing business metrics.
+- Define explicit missing-value policies.
+- Use a shared preprocessing pipeline for training and inference.
+- Preserve category vocabularies.
+- Add data-quality checks before training.
+- Detect possible leakage from post-resolution fields.
+
+**Technical concept:**  
+Training and serving must apply the same deterministic transformations.
+
+**Status:**  
+These improvements are **not implemented in the current repository**.
+
+---
+
+## 3. Machine learning and NLP
+
+### 19. Which ML algorithms are present?
+
+**Interview-ready answer:**  
+The notebooks contain Logistic Regression, Multinomial Naive Bayes, Random Forest, XGBoost, LSTM classification, and Transformer/BERT-style classification. The deployed API uses a Transformer for category classification, a serialized priority classifier, and a serialized resolution-time regression model.
+
+**Repository evidence:**  
+`training/baselineModel.ipynb`, `AdvacedClassicalMLModels.ipynb`, `LSTMClassification.ipynb`, `BertClassification.ipynb`, and `model_service.py`.
+
+---
+
+### 20. Why start with Logistic Regression?
+
+**Interview-ready answer:**  
+Logistic Regression is a strong baseline for TF-IDF text classification. It is relatively fast, interpretable, and provides a reference point for judging whether more complex models add value.
+
+**Technical concept:**  
+For multiclass classification, Logistic Regression learns class-specific weights over sparse TF-IDF features.
+
+**Repository evidence:**  
+`training/baselineModel.ipynb`.
+
+---
+
+### 21. How does Multinomial Naive Bayes work here?
+
+**Interview-ready answer:**  
+Multinomial Naive Bayes estimates the probability of a ticket class from word-feature likelihoods. It is commonly used for sparse text representations such as TF-IDF or count vectors.
+
+**Technical concept:**  
+It applies Bayes’ theorem while assuming conditional independence between features given the class.
+
+**Repository evidence:**  
+`training/baselineModel.ipynb`.
+
+---
+
+### 22. How was Random Forest used?
+
+**Interview-ready answer:**  
+The advanced notebook builds a pipeline that combines text with tabular text-length features, applies TF-IDF, and trains a `RandomForestClassifier` with 100 trees, `random_state=42`, and `n_jobs=-1`.
+
+**Technical concept:**  
+Random Forest trains many decision trees on randomized samples and averages their predictions to reduce variance.
+
+**Repository evidence:**  
+`training/AdvacedClassicalMLModels.ipynb`.
+
+---
+
+### 23. How was XGBoost used?
+
+**Interview-ready answer:**  
+The advanced notebook uses XGBoost for multiclass classification with `objective="multi:softprob"` and `num_class=5`. Optuna searches parameters such as number of estimators, depth, learning rate, subsampling, regularization, and child weight.
+
+**Technical concept:**  
+XGBoost is a gradient-boosted tree algorithm. Each new tree attempts to correct errors made by the current ensemble.
+
+**Important caveat:**  
+The notebook output shows repeated `1000000.0` objective values caused by invalid or unavailable log-loss calculations. That tuning result should not be presented as a successful optimized model without re-running and validating it.
+
+---
+
+### 24. What classification results are visible in the repository?
+
+**Interview-ready answer:**  
+The stored classification report shows approximately 19% accuracy across five relatively balanced classes. Per-class F1 scores range from approximately 0.17 to 0.22.
+
+The five classes shown are Billing inquiry, Cancellation request, Product inquiry, Refund request, and Technical issue.
+
+**Technical interpretation:**  
+For five balanced classes, random accuracy would be approximately 20%, so the reported result is close to a random baseline. This indicates that the training setup or dataset requires improvement before claiming strong classification performance.
+
+**Repository evidence:**  
+`training/classification_report.txt`.
+
+---
+
+### 25. How would you address the low classification performance?
+
+**Interview-ready answer:**  
+
+1. Inspect the actual text quality and label consistency.
+2. Check whether the descriptions are synthetic or repetitive.
+3. Compare against a majority-class and random baseline.
+4. Use stratified cross-validation.
+5. Tune TF-IDF n-grams, minimum document frequency, and regularization.
+6. Clean template artifacts such as `{product_purchased}`.
+7. Evaluate confusion between semantically similar classes.
+8. Fine-tune the Transformer with a validated train/validation split.
+9. Calibrate confidence scores.
+10. Confirm that the deployed model matches the evaluated model.
+
+**Status:**  
+These are proposed improvements, not all currently implemented.
+
+---
+
+### 26. Why use TF-IDF?
+
+**Interview-ready answer:**  
+TF-IDF represents words according to how important they are to a document relative to the corpus. It reduces the influence of very common words and highlights terms that help distinguish ticket categories.
+
+The baseline pipeline uses `TfidfVectorizer(stop_words="english", max_features=5000)`.
+
+**Technical concept:**  
+TF-IDF is a sparse bag-of-words representation. It does not understand word order or deep semantic similarity.
+
+---
+
+### 27. Why use a Transformer for the deployed category model?
+
+**Interview-ready answer:**  
+A Transformer can capture contextual relationships between words better than a bag-of-words model. The API uses `AutoTokenizer` and `AutoModelForSequenceClassification`, truncates inputs to 512 tokens, and uses the model’s logits to calculate class probabilities.
+
+**Repository evidence:**  
+`model_service.py`, `_load_models()`, and `predict()`.
+
+**Important caveat:**  
+The repository does not provide enough visible notebook content to confidently identify the exact pretrained checkpoint or all fine-tuning details. I would verify those before discussing them in an interview.
+
+---
+
+### 28. Explain the category prediction flow.
+
+**Interview-ready answer:**  
+
+```python
+inputs = tokenizer(
+    text,
+    return_tensors="pt",
+    truncation=True,
+    padding=True,
+    max_length=512,
+)
+output = category_model(**inputs)
+probabilities = torch.softmax(output.logits, dim=1)
+class_id = torch.argmax(probabilities, dim=1).item()
+category = label_encoder.inverse_transform([class_id])[0]
+```
+
+The model returns logits. Softmax converts them to a probability distribution. The highest-probability class is selected and mapped back to a human-readable label.
+
+**Technical concept:**  
+Logits are unnormalized model scores; softmax converts them into values that sum to one.
+
+---
+
+### 29. Is the reported confidence a calibrated probability?
+
+**Interview-ready answer:**  
+Not necessarily. The API calls softmax and returns the maximum class probability, but it does not perform calibration or uncertainty validation. Therefore, the value should be treated as model confidence, not guaranteed real-world probability.
+
+**Status:**  
+Calibration is **not implemented in the current repository**. Temperature scaling or reliability diagrams could be added.
+
+---
+
+### 30. How does the resolution-time model use other predictions?
+
+**Interview-ready answer:**  
+The resolution feature builder inserts the predicted category and priority into the input frame. If they are unavailable, it uses `"General Inquiry"` and `"Medium"` as defaults. It then combines these with customer, product, channel, satisfaction, and ticket text features.
+
+**Technical concept:**  
+This is a chained or dependent prediction flow. Errors in category or priority can propagate into resolution-time predictions.
+
+**Repository evidence:**  
+`model_service.py`, `_resolution_features()`.
+
+---
+
+# Deeper technical interview questions
+
+## Project and architecture
+
+### 31. Why is model loading performed at module initialization?
+
+**Answer:**  
+`model_service = ModelService()` is created when the FastAPI module loads. This loads models once instead of once per request, reducing prediction latency.
+
+**Concept:**  
+Long-lived service state avoids repeated deserialization.
+
+**Improvement:**  
+Use an application startup/lifespan hook, explicitly report readiness, and control worker behavior for memory-heavy Transformer models.
+
+---
+
+### 32. What are the consequences of loading a Transformer in multiple Uvicorn workers?
+
+**Answer:**  
+Each worker may load its own copy of the model, increasing memory usage. A production deployment should measure memory requirements and decide whether to use one worker, model sharing, or a dedicated model-serving system.
+
+**Status:**  
+Worker scaling strategy is **not implemented in the current repository**.
+
+---
+
+### 33. Is the API asynchronous?
+
+**Answer:**  
+The endpoints are defined with normal synchronous `def` functions. The frontend also uses Python’s blocking `urllib.request.urlopen`.
+
+**Concept:**  
+The service is synchronous. This is acceptable for a low-volume prototype but can limit throughput when inference is slow.
+
+**Improvement:**  
+Use an async HTTP client for the frontend and consider background or dedicated inference workers for high traffic.
+
+---
+
+### 34. What is the purpose of `API_VERSION = "v1"`?
+
+**Answer:**  
+The configuration defines a version string, while the actual route is hardcoded as `/v1/predict`. Versioned routes allow future API contracts to coexist.
+
+**Potential issue:**  
+The constant is not used to construct the route. This could create configuration drift.
+
+---
+
+### 35. How would you prevent training-serving skew?
+
+**Answer:**  
+I would package preprocessing with each model pipeline, define a shared feature schema, version the preprocessing code, and run golden test cases comparing training-time and API-time feature outputs.
+
+**Current status:**  
+The serialized priority/resolution models may contain preprocessing, but there is no explicit automated parity test in the repository.
+
+---
+
+## Python
+
+### 36. Why use `pathlib.Path` in `config.py`?
+
+**Answer:**  
+`Path` provides platform-independent path manipulation and makes it easy to derive the project root from `__file__`.
+
+**Concept:**  
+It is safer and clearer than manually concatenating strings with `/`.
+
+---
+
+### 37. Why use `dict[str, Any]` for loaded models?
+
+**Answer:**  
+The service stores several heterogeneous objects: a tokenizer, a Transformer, a label encoder, and classical ML predictors. A dictionary allows them to be accessed by role.
+
+**Potential improvement:**  
+Use a typed dataclass or explicit attributes for stronger static validation and readability.
+
+---
+
+### 38. What is the purpose of `@staticmethod` in the feature methods?
+
+**Answer:**  
+`_input_frame`, `_priority_features`, and `_resolution_features` do not need to access instance state. Declaring them static communicates that they depend only on their arguments.
+
+**Concept:**  
+A static method belongs to the class namespace but does not receive `self`.
+
+---
+
+### 39. What is the risk of broad exception handling?
+
+**Answer:**  
+The API catches `Exception` around prediction and returns a generic HTTP 500. This prevents uncaught crashes but can hide the root cause and may expose exception details through the response.
+
+**Improvement:**  
+
+- Log the full exception internally.
+- Return a safe public error message.
+- Distinguish validation, model, and infrastructure failures.
+- Add request correlation IDs.
+
+---
+
+### 40. What is the issue with `sys.path.insert()` in `1_EDA.py`?
+
+**Answer:**  
+It modifies Python’s import path at runtime to locate the project root. It can work in a prototype, but it is fragile and can hide packaging problems.
+
+**Improvement:**  
+Use a proper Python package, install the project, or configure the application’s working directory consistently.
+
+---
+
+## Data preprocessing and feature engineering
+
+### 41. How are duplicate records handled?
+
+**Answer:**  
+Duplicate removal is **not implemented in the current repository**. A production preprocessing pipeline should define a duplicate key, such as ticket ID plus timestamp, and measure how duplicates affect the target distribution.
+
+---
+
+### 42. How are outliers in resolution time handled?
+
+**Answer:**  
+The EDA fallback clips synthetic values to 1–168 hours, but the actual production training pipeline’s outlier policy is not clearly implemented in the application code.
+
+**Improvement:**  
+Inspect extreme values, verify timestamp validity, and choose a business-supported policy such as winsorization, log transformation, robust loss, or filtering invalid records.
+
+---
+
+### 43. Could there be data leakage in priority prediction?
+
+**Answer:**  
+Potentially. Priority features include customer attributes, product, channel, days since purchase, and text. The main question is whether any feature was only known after the ticket was triaged. If so, it would leak future information.
+
+**Concept:**  
+Only features available at prediction time should be used.
+
+---
+
+### 44. Could there be leakage in resolution-time prediction?
+
+**Answer:**  
+Yes. Satisfaction rating or fields recorded after resolution may not be available when a new ticket arrives. The feature list includes satisfaction rating, so its availability timing must be verified.
+
+**Important distinction:**  
+The API accepts satisfaction rating, but the Streamlit page always sends a default value of `4`. This creates a mismatch between training and UI behavior.
+
+---
+
+### 45. Why does the API use `First Response Time = datetime.now().date()`?
+
+**Answer:**  
+It needs a current reference date to calculate days since purchase. However, this is an approximation and uses the server’s local date.
+
+**Improvement:**  
+Use a clearly defined ticket-created timestamp, store timestamps in UTC, and calculate features using the same reference event used during training.
+
+---
+
+## Machine learning and evaluation
+
+### 46. Why is accuracy insufficient for this project?
+
+**Answer:**  
+Accuracy can hide poor performance on minority ticket classes. The project already records precision, recall, F1, classification reports, and confusion matrices. Macro F1 should be emphasized when every class matters equally.
+
+**Repository evidence:**  
+`training/classification_report.txt`, MLflow notebook.
+
+---
+
+### 47. What does the confusion matrix tell you?
+
+**Answer:**  
+It shows actual classes by predicted classes. In the stored report, predictions are distributed broadly across all five classes, and the overall accuracy is close to chance. This suggests weak separation between categories.
+
+**Concept:**  
+The matrix helps identify which classes are systematically confused.
+
+---
+
+### 48. Why use `StratifiedKFold`?
+
+**Answer:**  
+It maintains class proportions across folds. This makes cross-validation more stable for multiclass classification, especially when classes are not perfectly balanced.
+
+**Repository evidence:**  
+`AdvacedClassicalMLModels.ipynb`.
+
+---
+
+### 49. What does `n_jobs=-1` do?
+
+**Answer:**  
+It allows scikit-learn to use all available CPU cores for parallel operations such as Random Forest training and cross-validation.
+
+**Trade-off:**  
+It can increase resource usage and cause contention in shared environments.
+
+---
+
+### 50. What is underfitting versus overfitting in this project?
+
+**Answer:**  
+
+- Underfitting could occur if TF-IDF features and a simple classifier cannot capture the ticket language.
+- Overfitting could occur if a deep model memorizes synthetic templates or if XGBoost/Random Forest fits training-specific patterns.
+- I would compare training and validation metrics, use cross-validation, inspect learning curves, and evaluate on a locked test set.
+
+---
+
+### 51. Why might the classification accuracy be close to 20%?
+
+**Answer:**  
+There are five classes, so 20% is approximately the uniform random baseline. Possible causes include low-quality or synthetic text, weak label-text relationships, incorrect preprocessing, class-label mismatch, or a model that was not trained consistently with the deployed artifacts.
+
+**Interview caution:**  
+Do not claim the model is production-ready based on the current report.
+
+---
+
+### 52. What should you verify before claiming the Transformer is better?
+
+**Answer:**  
+
+- Same train/test split.
+- Same label definitions.
+- Same preprocessing.
+- Same evaluation metrics.
+- Same test set.
+- No leakage.
+- Confidence calibration.
+- Comparison against the TF-IDF baseline.
+
+A model should not be selected solely because it is more advanced.
+
+---
+
+## NLP
+
+### 53. What is the difference between TF-IDF and Transformer embeddings?
+
+**Answer:**  
+
+- TF-IDF is sparse, word-based, and mostly context-independent.
+- Transformer representations are dense and contextual; the meaning of a word can change based on surrounding words.
+- TF-IDF is faster and easier to interpret.
+- Transformers generally require more compute and careful fine-tuning.
+
+---
+
+### 54. How does tokenization work in the Transformer path?
+
+**Answer:**  
+`AutoTokenizer` converts the combined subject and description into token IDs and attention-related tensors. The API uses truncation, padding, PyTorch tensors, and a maximum sequence length of 512.
+
+**Repository evidence:**  
+`model_service.py`, lines 136–137.
+
+---
+
+### 55. What happens when a ticket exceeds 512 tokens?
+
+**Answer:**  
+The input is truncated. This prevents excessive memory usage but can remove important information from long descriptions.
+
+**Improvement:**  
+Use intelligent truncation, summarize long tickets, chunk the text, or evaluate whether important information tends to occur at the end.
+
+---
+
+### 56. Is GloVe implemented?
+
+**Answer:**  
+GloVe is **not confirmed in the current repository implementation**. The repository clearly contains TF-IDF, LSTM-related training, and Transformer/BERT-related notebooks, but I would not claim GloVe unless it is explicitly present in the full notebook source.
+
+---
+
+### 57. Is attention explicitly implemented?
+
+**Answer:**  
+Custom attention code is not present in the visible API. Transformer attention is used internally by the Hugging Face model, but the project does not implement a custom attention layer in the serving code.
+
+---
+
+### 58. How would you compare LSTM and Transformer approaches?
+
+**Answer:**  
+An LSTM processes tokens sequentially and can model order, but long-range dependencies and training speed can be limitations. A Transformer uses self-attention, processes tokens more parallelly, and usually captures contextual dependencies better, at higher computational cost.
+
+**Repository evidence:**  
+`LSTMClassification.ipynb` and `BertClassification.ipynb`.
+
+---
+
+## Hyperparameter tuning
+
+### 59. What hyperparameters were tuned with Optuna?
+
+**Answer:**  
+The XGBoost notebook searches:
+
+- `n_estimators`
+- `max_depth`
+- `learning_rate`
+- `subsample`
+- `colsample_bytree`
+- `min_child_weight`
+- `gamma`
+- `reg_alpha`
+- `reg_lambda`
+
+It uses a TPE sampler with seed 42.
+
+---
+
+### 60. What was the Optuna objective?
+
+**Answer:**  
+The objective performs stratified five-fold cross-validation and attempts to minimize mean log loss. The notebook uses `multi:softprob` so the model can produce class probabilities.
+
+**Important caveat:**  
+The stored output shows repeated fallback values of `1e6`, suggesting invalid log-loss evaluation or failed folds. The tuning result needs to be revalidated.
+
+---
+
+### 61. How would you fix the Optuna tuning issue?
+
+**Answer:**  
+
+- Inspect `cross_val_score` warnings and fold-level exceptions.
+- Ensure `y_pred_proba` has the correct number and order of classes.
+- Avoid silently converting all failures to `1e6`.
+- Use `error_score="raise"` during debugging.
+- Verify the scorer signature for the installed scikit-learn version.
+- Log successful and failed trials separately.
+- Validate the best parameters on an untouched test set.
+
+---
+
+### 62. Why keep a holdout test set during tuning?
+
+**Answer:**  
+The test set should represent unseen data. If it is used repeatedly during tuning, it becomes part of the optimization process and produces an overly optimistic estimate.
+
+---
+
+## MLflow
+
+### 63. How is MLflow used?
+
+**Answer:**  
+The notebooks create an experiment named `CustomerIntelligence_Experiment`, start runs, log parameters and metrics, and save artifacts such as classification reports and confusion matrices. A local file-based tracking URI is used in the notebook environment.
+
+**Repository evidence:**  
+`training/baselineModel.ipynb`, `AdvacedClassicalMLModels.ipynb`, `mlflowuiviewing.ipynb`.
+
+---
+
+### 64. What parameters and metrics are logged?
+
+**Answer:**  
+The notebooks log model parameters, accuracy, weighted precision, weighted recall, weighted F1, and cross-validation means and standard deviations. They also log classification reports and confusion matrix artifacts.
+
+---
+
+### 65. Is MLflow connected to the production API?
+
+**Answer:**  
+No. MLflow integration is present in the training notebooks. The serving API returns `"model_version": "local"` and does not query an MLflow Model Registry.
+
+**Status:**  
+Production model registry integration is **not implemented in the current repository**.
+
+---
+
+### 66. How would you make experiments reproducible?
+
+**Answer:**  
+
+- Log dataset version or hash.
+- Log code commit.
+- Log Python and library versions.
+- Log preprocessing configuration.
+- Log random seeds.
+- Log the exact model artifact.
+- Store the run ID alongside the deployment.
+- Use a remote tracking server and artifact store.
+
+---
+
+## FastAPI and Pydantic
+
+### 67. What endpoints are exposed?
+
+**Answer:**  
+
+- `GET /health`
+- `POST /v1/predict`
+
+The health endpoint reports service readiness, loaded model names, and loading errors. The prediction endpoint validates the request and returns category, confidence, priority, resolution time, and model version.
+
+---
+
+### 68. What validation does `TicketRequest` provide?
+
+**Answer:**  
+
+- `description` must contain at least one character.
+- `customer_age` must be between 1 and 120.
+- `satisfaction_rating` must be between 1 and 5.
+- `purchase_date` must parse as a date.
+- Several fields have defaults.
+
+**Repository evidence:**  
+`prediction_api/schemas.py`.
+
+---
+
+### 69. What happens if the request is invalid?
+
+**Answer:**  
+FastAPI/Pydantic rejects it before the prediction function runs, normally returning HTTP 422 with validation details.
+
+---
+
+### 70. What is the purpose of `response_model=PredictionResponse`?
+
+**Answer:**  
+It validates and documents the response structure. It also enables FastAPI/OpenAPI documentation and prevents accidental response fields from being returned.
+
+---
+
+### 71. What does HTTP 503 mean in this API?
+
+**Answer:**  
+The service is running, but no prediction model is available. The endpoint explicitly checks `model_service.is_ready` and raises 503 if false.
+
+---
+
+### 72. What is a weakness in the current error handling?
+
+**Answer:**  
+The endpoint catches all prediction exceptions and places the exception string directly into the HTTP response. That can leak internal implementation details. It also does not distinguish errors from the category, priority, or resolution models.
+
+**Improvement:**  
+Use structured internal logs, safe public error messages, and model-specific error codes.
+
+---
+
+### 73. Does the API have authentication?
+
+**Answer:**  
+Authentication is **not implemented in the current repository**. The API is designed as a local/containerized service.
+
+**Production improvement:**  
+Add API keys or OAuth2/JWT, network restrictions, rate limits, and TLS termination.
+
+---
+
+## Streamlit
+
+### 74. How does the prediction page communicate with FastAPI?
+
+**Answer:**  
+`app/pages/2_Prediction.py` uses `urllib.request.Request` and `urlopen`. It reads `PREDICTION_API_URL`, sends JSON to `/v1/predict`, and parses the JSON response.
+
+---
+
+### 75. How does the Streamlit page validate inputs?
+
+**Answer:**  
+It validates that the description is not blank before sending the request. Age is constrained through `st.number_input`, dates come from `st.date_input`, and the API performs the authoritative Pydantic validation.
+
+---
+
+### 76. What happens if the API is unavailable?
+
+**Answer:**  
+The page catches `HTTPError`, `URLError`, and `TimeoutError` and displays an error message. The sidebar also calls `/health` and shows whether the API is ready.
+
+---
+
+### 77. Why should the frontend not load the models itself?
+
+**Answer:**  
+Keeping model loading in the API separates presentation from inference, reduces duplication, and allows the API to be scaled independently.
+
+---
+
+### 78. How does the EDA page work?
+
+**Answer:**  
+It loads and caches CSV data using `@st.cache_data`, standardizes column names, creates derived fields, exposes sidebar filters, and renders Plotly, Matplotlib, Seaborn, and WordCloud visualizations.
+
+**Repository evidence:**  
+`app/pages/1_EDA.py`.
+
+---
+
+### 79. What is risky about the EDA fallback data?
+
+**Answer:**  
+When expected columns are missing, the page creates defaults. For missing resolution times, it generates random exponential values. This can make the dashboard look complete while displaying values that do not represent real observations.
+
+**Improvement:**  
+Show missing data explicitly and label any demo data clearly.
+
+---
+
+## Docker and deployment
+
+### 80. Why use two Dockerfiles?
+
+**Answer:**  
+The API and frontend have different dependencies and runtime commands. Separating them produces smaller, more focused containers and allows independent scaling.
+
+---
+
+### 81. How do the containers communicate?
+
+**Answer:**  
+Docker Compose creates a service network. The frontend uses `http://api:8000`, where `api` resolves to the API service name.
+
+---
+
+### 82. How are model artifacts provided to the API container?
+
+**Answer:**  
+The Compose file mounts the host `./models` directory at `/app/models` as read-only.
+
+```yaml
+volumes:
+  - ./models:/app/models:ro
+```
+
+**Concept:**  
+Read-only mounts reduce the chance that the application modifies model artifacts.
+
+---
+
+### 83. What is the purpose of the health check?
+
+**Answer:**  
+Compose calls `/health` periodically. The frontend depends on the API service becoming healthy before starting.
+
+**Caveat:**  
+The health endpoint reports service/model status, but the health check itself only tests whether the endpoint responds successfully. A more strict readiness policy could return a non-2xx status when required models are missing.
+
+---
+
+### 84. What would you improve for production deployment?
+
+**Answer:**  
+
+- Pin dependency versions.
+- Use multi-stage builds.
+- Add non-root users.
+- Add resource limits.
+- Add structured logs.
+- Add authentication and TLS.
+- Store models in versioned artifact storage.
+- Add CI tests and image scanning.
+- Add metrics and tracing.
+- Use a production model registry.
+- Add autoscaling and rollback support.
+
+Most of these are **not implemented in the current repository**.
+
+---
+
+# Scenario-based questions
+
+## 85. Model performance suddenly decreases. What do you check?
+
+**Interview-ready answer:**
+
+1. Confirm the metric calculation and test-set definition.
+2. Check data drift in ticket text, channels, products, and class proportions.
+3. Compare training and serving preprocessing.
+4. Verify that the correct model artifact is loaded.
+5. Check label mappings and feature-column order.
+6. Inspect missing values and invalid dates.
+7. Compare confidence distributions.
+8. Review recent model or dependency changes.
+9. Evaluate performance by class and channel.
+10. Retrain only after identifying the cause.
+
+---
+
+## 86. API latency becomes slow. How do you investigate?
+
+**Answer:**
+
+- Measure request, tokenization, category inference, priority inference, and resolution inference separately.
+- Check CPU and memory utilization.
+- Confirm whether model loading happens repeatedly.
+- Inspect Transformer sequence length.
+- Check concurrent requests and worker count.
+- Profile Pandas feature creation.
+- Add request timing metrics.
+- Consider batching, quantization, caching, or a dedicated inference server.
+
+---
+
+## 87. The prediction service crashes after deployment. What do you check?
+
+**Answer:**
+
+- Container logs.
+- Model mount existence and permissions.
+- Environment variables.
+- Model/library compatibility.
+- Python and Torch versions.
+- Health-check output.
+- Available memory.
+- Whether `models/` was excluded from the image and not mounted.
+- Whether the serialized artifact can be loaded in the container.
+
+---
+
+## 88. The dataset grows by 10x. What changes would you make?
+
+**Answer:**
+
+- Move from CSV to durable storage.
+- Process data in chunks or with a distributed framework.
+- Avoid loading the entire dataset into Streamlit.
+- Use a data warehouse or object store.
+- Add scheduled retraining.
+- Track dataset versions.
+- Use efficient sparse matrices for TF-IDF.
+- Separate offline training from online inference.
+- Add indexing and caching.
+
+---
+
+## 89. Priority predictions are failing but category predictions work. What do you investigate?
+
+**Answer:**
+
+- Confirm `priority/model.skops` exists.
+- Inspect `self.errors["priority"]`.
+- Verify the trusted types passed to `skops.io.load`.
+- Compare API feature names and order with training features.
+- Check categorical values such as `"Others"` versus `"Other"`.
+- Confirm that the serialized model supports `.predict()`.
+- Test the priority model independently with a known feature row.
+
+---
+
+## 90. Resolution-time predictions look unrealistic. What do you check?
+
+**Answer:**
+
+- Validate the target units: hours versus days.
+- Check date calculations.
+- Inspect outliers and negative durations.
+- Verify the feature order and categorical preprocessing.
+- Check whether default category/priority values are being used.
+- Compare API features with training features.
+- Confirm whether satisfaction rating was available at prediction time.
+- Add bounds or uncertainty intervals only after validating the model.
+
+---
+
+## 91. The dataset contains a new ticket category. What changes are required?
+
+**Answer:**
+
+- Update the training labels.
+- Retrain the category model.
+- Regenerate the label encoder.
+- Ensure downstream priority and resolution pipelines understand the new category.
+- Update UI and documentation if category lists are displayed.
+- Version the new artifacts.
+- Add backward compatibility if old clients still expect the original labels.
+
+---
+
+## 92. How would you improve the architecture for production?
+
+**Answer:**
+
+I would split the platform into:
+
+- Data ingestion and validation.
+- Feature engineering.
+- Offline training pipelines.
+- Model registry and artifact store.
+- Versioned inference service.
+- API gateway and authentication.
+- Monitoring and drift detection.
+- Persistent ticket storage.
+- CI/CD and automated deployment.
+
+The current repository is a useful prototype architecture, but these production controls are not currently implemented.
+
+---
+
+# Project deep-dive questions
+
+## 93. Why does the resolution model depend on predicted category and priority?
+
+**Answer:**  
+Resolution effort can vary by issue category and urgency, so those predictions are useful features. However, this creates cascading error: incorrect category or priority can affect the resolution estimate.
+
+---
+
+## 94. What happens if only one of the three models loads?
+
+**Answer:**  
+The API continues operating in partial mode. Available fields are returned and unavailable fields remain `None`. The health response reports which models loaded and which failed.
+
+---
+
+## 95. Why is `model_version` always `"local"`?
+
+**Answer:**  
+The response schema defaults to `"local"`, and the service does not dynamically obtain a registry or artifact version.
+
+**Improvement:**  
+Read the model version from metadata, a manifest, or MLflow.
+
+---
+
+## 96. Why does the UI send satisfaction rating `4` without asking the user?
+
+**Answer:**  
+The form does not expose a satisfaction input, so it sends a default value. This is a practical placeholder but should be reviewed because satisfaction may not be known at ticket creation time.
+
+---
+
+## 97. Is the current category confidence reliable enough for routing?
+
+**Answer:**  
+Not without calibration and threshold analysis. It is simply the maximum softmax output. The service should evaluate confidence calibration and define a fallback/manual-review threshold.
+
+---
+
+## 98. What is the most important weakness you would disclose?
+
+**Answer:**  
+The stored classification results are close to the five-class random baseline. I would not represent the model as highly accurate. I would explain that the project demonstrates the complete ML application workflow while identifying model-quality improvement as the next priority.
+
+---
+
+## 99. What technical decision are you most prepared to defend?
+
+**Answer:**  
+Separating Streamlit from FastAPI is a defensible design choice. It keeps UI concerns separate from model-serving concerns, allows the API to load models once, and makes container deployment straightforward.
+
+---
+
+## 100. What would you implement next?
+
+**Answer:**  
+
+1. Reproduce and validate all training results.
+2. Fix the Optuna objective failures.
+3. Create a deterministic preprocessing package.
+4. Add automated tests for API feature parity.
+5. Add model versioning and MLflow Registry integration.
+6. Add structured logging and metrics.
+7. Remove synthetic fallback values from analytics.
+8. Add authentication and production deployment controls.
+9. Improve the category model using clean, validated labeled data.
+
+---
+
+# Resume cross-check
+
+No resume was available in the repository or conversation. Therefore, no specific resume claim can be verified.
+
+## Claims directly supported by the repository
+
+You can confidently discuss:
+
+- Python-based customer-support intelligence system.
+- Streamlit dashboard.
+- FastAPI prediction service.
+- Pydantic request and response validation.
+- Hugging Face Transformer category classification.
+- Serialized priority and resolution-time models.
+- Pandas-based feature construction.
+- Docker and Docker Compose deployment.
+- TF-IDF baseline experiments.
+- Logistic Regression and Multinomial Naive Bayes.
+- Random Forest and XGBoost experiments.
+- LSTM and Transformer/BERT notebooks.
+- Optuna experiments.
+- MLflow parameter, metric, and artifact logging.
+- Plotly, Matplotlib, Seaborn, and WordCloud visualization.
+
+## Claims requiring careful explanation
+
+### “Production-ready ML system”
+
+This is difficult to defend fully because the repository lacks:
+
+- Automated tests.
+- Authentication.
+- Structured logging.
+- CI/CD.
+- Model registry integration.
+- Persistent database storage.
+- Monitoring and alerting.
+- Dependency pinning.
+- Explicit model artifact versioning.
+
+A safer description is:
+
+> “A containerized prototype ML application with a Streamlit dashboard and FastAPI inference service.”
+
+### “High-performing classifier”
+
+The stored classification report shows approximately 19% accuracy across five classes. This is close to a uniform random baseline and should not be described as high-performing.
+
+### “Real-time model monitoring”
+
+The repository has an API health endpoint, but ongoing model-performance monitoring and drift detection are **not implemented in the current repository**.
+
+### “MLflow model deployment”
+
+MLflow is used in notebooks for tracking experiments and artifacts. The deployed API loads local files and does not use an MLflow Model Registry.
+
+### “Customer segmentation”
+
+A notebook filename references customer segmentation, but the deployed application does not expose a segmentation endpoint or UI feature. Be prepared to explain this as an experimental notebook rather than a deployed product capability.
+
+## Technologies you should be ready to explain
+
+Prioritize these topics:
+
+1. FastAPI endpoint lifecycle.
+2. Pydantic validation.
+3. Hugging Face tokenizer and sequence-classification model.
+4. Softmax and confidence scoring.
+5. TF-IDF.
+6. Logistic Regression versus Transformer classification.
+7. Feature parity between training and inference.
+8. Cascading predictions for resolution time.
+9. `joblib` versus `skops`.
+10. Docker Compose networking.
+11. Health checks and partial model loading.
+12. MLflow experiment tracking.
+13. Optuna objective design.
+14. Stratified cross-validation.
+15. Why the current classification score is near baseline.
+16. Data leakage and synthetic fallback data.
+17. Production gaps: security, logging, monitoring, versioning, and testing.
+
+## A strong two-minute project explanation
+
+> “I built a customer-support intelligence application that predicts ticket category, priority, and estimated resolution time. The system has a Streamlit frontend for EDA and interactive predictions, while a FastAPI service handles validation, model loading, feature construction, and inference. Category classification uses a locally stored Hugging Face Transformer, and the priority and resolution tasks use serialized classical ML models.  
+>
+> I also created training notebooks comparing TF-IDF baselines, Logistic Regression, Naive Bayes, Random Forest, XGBoost, LSTM, and Transformer approaches. MLflow was used to track experiment parameters, metrics, classification reports, and confusion matrices, while Optuna was explored for XGBoost tuning.  
+>
+> The application is containerized using separate API and frontend Dockerfiles with Docker Compose. One important limitation I identified is that the stored classification performance is close to the random baseline for five classes, so I would improve the data quality, preprocessing consistency, tuning objective, and evaluation process before considering it production-ready.”
