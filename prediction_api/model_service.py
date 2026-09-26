@@ -9,6 +9,7 @@ from .config import (
     LABEL_ENCODER_PATH,
     PRIORITY_MODEL_PATH,
     RESOLUTION_MODEL_PATH,
+    TOKENIZER_PATH,
 )
 from .schemas import PredictionResponse, TicketRequest
 
@@ -23,7 +24,7 @@ class ModelService:
         try:
             from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-            self.models["tokenizer"] = AutoTokenizer.from_pretrained(CATEGORY_MODEL_PATH)
+            self.models["tokenizer"] = AutoTokenizer.from_pretrained(TOKENIZER_PATH)
             self.models["category_model"] = AutoModelForSequenceClassification.from_pretrained(
                 CATEGORY_MODEL_PATH
             )
@@ -44,21 +45,10 @@ class ModelService:
         except Exception as exc:
             self.errors["resolution_time"] = str(exc)
 
-        try:
-            import skops.io as sio
-
-            trusted_types = [
-                "sklearn",
-                "numpy",
-                "lightgbm",
-                "collections",
-                "collections.OrderedDict",
-                "lightgbm.basic.Booster",
-                "lightgbm.sklearn.LGBMClassifier",
-                "sklearn.compose._column_transformer._RemainderColsList",
-            ]
-            self.models["priority_model"] = sio.load(PRIORITY_MODEL_PATH, trusted=trusted_types)
-        except Exception as exc:
+        try: 
+            import joblib 
+            self.models["priority_model"] = joblib.load( PRIORITY_MODEL_PATH ) 
+        except Exception as exc: 
             self.errors["priority"] = str(exc)
 
     @property
