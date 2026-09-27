@@ -8,6 +8,7 @@ from .config import (
     CATEGORY_MODEL_PATH,
     LABEL_ENCODER_PATH,
     PRIORITY_MODEL_PATH,
+    PRIORITY_SKOPS_PATH,
     RESOLUTION_MODEL_PATH,
     TOKENIZER_PATH,
 )
@@ -24,38 +25,73 @@ class ModelService:
         try:
             from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-            self.models["tokenizer"] = AutoTokenizer.from_pretrained(TOKENIZER_PATH)
+            if not TOKENIZER_PATH.exists() or not CATEGORY_MODEL_PATH.exists():
+                raise FileNotFoundError(f"Category model folder not found: {CATEGORY_MODEL_PATH}")
+
+            self.models["tokenizer"] = AutoTokenizer.from_pretrained(str(TOKENIZER_PATH))
             self.models["category_model"] = AutoModelForSequenceClassification.from_pretrained(
-                CATEGORY_MODEL_PATH
+                str(CATEGORY_MODEL_PATH)
             )
             self.models["category_model"].eval()
         except Exception as exc:
             self.errors["category"] = str(exc)
 
-        try:
-            self.models["label_encoder"] = joblib.load(LABEL_ENCODER_PATH)
-        except Exception as exc:
-            self.errors["category_label_encoder"] = str(exc)
+        if LABEL_ENCODER_PATH.exists():
+            try:
+                self.models["label_encoder"] = joblib.load(str(LABEL_ENCODER_PATH))
+            except Exception as exc:
+                self.errors["category_label_encoder"] = str(exc)
+        elif "category_model" in self.models:
+            try:
+                self.models["label_encoder"] = self.models["category_model"].config.id2label
+            except Exception as exc:
+                self.errors["category_label_encoder"] = str(exc)
 
         try:
-            resolution_model = joblib.load(RESOLUTION_MODEL_PATH)
+            resolution_model = joblib.load(str(RESOLUTION_MODEL_PATH))
             if not hasattr(resolution_model, "predict"):
                 raise TypeError("resolution model does not expose predict")
             self.models["resolution_time_predictor"] = resolution_model
         except Exception as exc:
             self.errors["resolution_time"] = str(exc)
 
-        try: 
-            import joblib 
-            self.models["priority_model"] = joblib.load( PRIORITY_MODEL_PATH ) 
-        except Exception as exc: 
-            self.errors["priority"] = str(exc)
+        priority_path = PRIORITY_MODEL_PATH if PRIORITY_MODEL_PATH.exists() else PRIORITY_SKOPS_PATH
+        if priority_path.exists():
+            try:
+                if str(priority_path).endswith(".skops"):
+                    import skops.io as sio
+
+                    self.models["priority_model"] = sio.load(
+                        str(priority_path),
+                        trusted=[
+                            "sklearn",
+                            "numpy",
+                            "lightgbm",
+                            "collections",
+                            "collections.OrderedDict",
+                            "lightgbm.basic.Booster",
+                            "lightgbm.sklearn.LGBMClassifier",
+                            "sklearn.compose._column_transformer._RemainderColsList",
+                        ],
+                    )
+                else:
+                    self.models["priority_model"] = joblib.load(str(priority_path))
+            except Exception as exc:
+                self.errors["priority"] = str(exc)
+        else:
+            self.errors["priority"] = f"Priority model not found: {priority_path}"
 
     @property
     def is_ready(self) -> bool:
-        return any(
+        return all(
             key in self.models
-            for key in ("category_model", "priority_model", "resolution_time_predictor")
+            for key in (
+                "tokenizer",
+                "category_model",
+                "label_encoder",
+                "priority_model",
+                "resolution_time_predictor",
+            )
         )
 
     def status(self) -> dict[str, Any]:
@@ -86,15 +122,27 @@ class ModelService:
         )
 
     @staticmethod
-    def _priority_features(frame: pd.DataFrame) -> pd.DataFrame:
+    def _priority_features(frame: pd.DataFrame, category: str | None) -> pd.DataFrame:
         result = frame.copy()
+        result["Ticket Type"] = category or "General Inquiry"
         result["Date of Purchase"] = pd.to_datetime(result["Date of Purchase"], errors="coerce")
         result["First Response Time"] = pd.to_datetime(result["First Response Time"], errors="coerce")
         result["Days Since Purchase"] = (
             result["First Response Time"].max() - result["Date of Purchase"]
         ).dt.days.fillna(0)
         result["Ticket Text"] = result["Ticket Subject"].fillna("") + " " + result["Ticket Description"].fillna("")
-        return result[["Customer Age", "Customer Gender", "Product Purchased", "Ticket Channel", "Days Since Purchase", "Ticket Text"]]
+        return result[
+            [
+                "Customer Age",
+                "Customer Gender",
+                "Product Purchased",
+                "Ticket Type",
+                "Ticket Channel",
+                "Customer Satisfaction Rating",
+                "Days Since Purchase",
+                "Ticket Text",
+            ]
+        ]
 
     @staticmethod
     def _resolution_features(frame: pd.DataFrame, category: str | None, priority: str | None) -> pd.DataFrame:
@@ -120,7 +168,7 @@ class ModelService:
         confidence = 0.0
         priority = None
 
-        if all(key in self.models for key in ("tokenizer", "category_model", "label_encoder")):
+        if all(key in self.models for key in ("tokenizer", "category_model")):
             import torch
 
             text = f"{ticket.subject} {ticket.description}"
@@ -129,11 +177,18 @@ class ModelService:
                 output = self.models["category_model"](**inputs)
             probabilities = torch.softmax(output.logits, dim=1)
             class_id = torch.argmax(probabilities, dim=1).item()
-            category = self.models["label_encoder"].inverse_transform([class_id])[0]
+
+            label_map = self.models.get("label_encoder")
+            if isinstance(label_map, dict):
+                category = label_map.get(class_id, str(class_id))
+            else:
+                category = label_map.inverse_transform([class_id])[0]
             confidence = float(probabilities[0][class_id].item())
 
         if "priority_model" in self.models:
-            priority_value = self.models["priority_model"].predict(self._priority_features(frame))[0]
+            priority_value = self.models["priority_model"].predict(
+                self._priority_features(frame, category)
+            )[0]
             priority = str(priority_value)
 
         resolution_time = None
