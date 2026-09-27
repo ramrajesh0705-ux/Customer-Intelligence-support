@@ -7,7 +7,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     MODEL_ROOT=/app/models
 
 COPY requirements-api.txt .
-RUN pip install --no-cache-dir -r requirements-api.txt
+RUN pip install --no-cache-dir -r requirements-api.txt \
+    && pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch
 
 COPY prediction_api ./prediction_api
 

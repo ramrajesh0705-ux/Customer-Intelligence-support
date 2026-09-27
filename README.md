@@ -145,7 +145,10 @@ For the prediction API:
 
 ```bash
 pip install -r requirements-api.txt
+pip install --index-url https://download.pytorch.org/whl/cpu torch
 ```
+
+PyTorch is installed separately from the CPU-only wheel index. This avoids pulling CUDA-enabled wheels and NVIDIA runtime packages on CPU-only machines. For GPU deployments, follow the PyTorch installation instructions for the target CUDA version instead.
 
 For a single local environment, installing both requirement files is the safest option because the dashboard and API are separate processes.
 
